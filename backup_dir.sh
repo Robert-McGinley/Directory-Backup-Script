@@ -10,6 +10,7 @@
 # v1.3 - Added /bin/time tracking for the archival process
 # v1.3.1 - Bugfix...
 # v1.3.2 - Added "quiet" option for crontabs. Should still keep the output on so cron will email you the results
+# v1.3.3 - Removed "quiet" code due to some errors (that I wasn't willing to fix yet)
 # v1.4 - Added 7z specific error checking
 # v1.4.1 - Added option to create $DESTDIR if it doesn't exist and $CREATEDIRS option variable to switch it on/off
 # v1.5 - Added tons of error checking routines
@@ -17,20 +18,24 @@
 ###########
 # Options #
 ###########
-# Set the destionation path where the finalized archive should go
-DESTPATH="~/files/backup"
+# TODO: Set these options up as optional switches and evaulate using switch/case
 
-QUIET="0"	#Either 0 = false (Default); 1 = true
+# Set the destination path where the finalized archive should go
+DESTPATH="~/files/backup"	#	"~/" is default
+
+# Sets the script to limit output (Not yet implemented)
+QUIET="0"	#	Either 0 = false (Default); 1 = true
 
 # If there's an error, cleanup any remaining files (You should keep this set to 1 unless you're troubleshooting)
-CLEANUPONERROR="1"	#Either 0 = false; 1 = true (Defualt)
+CLEANUPONERROR="1"	#	Either 0 = false; 1 = true (Defualt)
 
 # Create needed directories if the do not already exist
-CREATEDIRS="1"	#Either 0 = false; 1 = true (Default)
+CREATEDIRS="1"	#	Either 0 = false; 1 = true (Default)
 
 #############
 # Functions #
 #############
+
 function printUsage () {
 	echo -e "Purpose: Backs up the specified directory.\nUsage: $0 <directory> [overwrite existing archives (0|1)]"
     echo -e "\t<directory>\tRequired\n\tDirectory to backup\n"
@@ -68,6 +73,14 @@ function cleanupOnError () {
 		fi	
 	fi
 }
+
+########
+# Code #
+########
+
+#############################
+# Pre-Flight Error Checking #
+#############################
 
 # User input and general pre-flight error checking
 if [ -z "$1" ]; then
@@ -108,10 +121,14 @@ else
 	fi	
 fi
 
-#OPT="-bd -ssw -mx9 -mhc=on -mf=on -m0=LZMA2 -md=64m -mmf=bt4 -mmc=10000 -mfb=273 -mlc=4 -mmt -ms=on -mtc=on -slp -scsUTF-8 -sccUTF-8"
+# Why does this always create an error?
+#7ZOPT="-bd -ssw -mx9 -mhc=on -mf=on -m0=LZMA2 -md=64m -mmf=bt4 -mmc=10000 -mfb=273 -mlc=4 -mmt -ms=on -mtc=on -slp -scsUTF-8 -sccUTF-8"
 
+###############
+# Backup Code #
+###############
 
-if [ -d "$DIRECTORY" && -r "$DIRECTORY" ]; then
+if [ -d "$DIRECTORY" && -r "$DIRECTORY" ]; then		# TODO: Don't need this check here as it's performed above
 	echo "Backing up $DIRECTORY..."
 	#/bin/tar cjf ~/files/$2/backup/$DIRECTORY_backup_`date -I`.tar.bz2 ~/$DIRECTORY
 	/usr/bin/time -p -q -o ~/.temptime ~/bin/7z a -t7z -bd -ssw -mx9 -mhc=on -mf=on -m0=LZMA2 -md=64m -mmf=bt4 -mmc=10000 -mfb=273 -mlc=4 -mmt -ms=on -mtc=on -slp -scsUTF-8 -sccUTF-8 $DESTPATH/$ARCHIVENAME $DIRECTORY/
@@ -121,41 +138,50 @@ if [ -d "$DIRECTORY" && -r "$DIRECTORY" ]; then
 	if [ $QUIET != "1" ]; then
 		case "$RET" in
 			0)
-				echo "Directory archival completed successfully. Your backup is located at $DESTPATH/$ARCHIVENAME."
+				echo "[*] Directory archival completed successfully. Your backup is located at $DESTPATH/$ARCHIVENAME."
 				if [ "TIMETAKEN" ]; then
-					echo "Archival time taken: $TIMETAKEN`
+					echo "[*] Compession time taken: $TIMETAKEN`
 				fi
 				exit 0
 			;;
 			1)
-				echo "There was a warning (non-fatal error) while archiving $DESTPATH"
-				echo "Directory archival completed successfully. Your backup is located at $DESTPATH/$ARCHIVENAME."
+				echo "[!] Warning: There was a warning (non-fatal error) while archiving $DESTPATH"
+				echo "[*] Directory archival completed successfully. Your backup is located at $DESTPATH/$ARCHIVENAME."
 				if [ "TIMETAKEN" ]; then
-					echo "Archival time taken: $TIMETAKEN"
+					echo "[*] Archival time taken: $TIMETAKEN"
 				fi
 				exit 0
 			;;
 			2)
-				echo "There was an unspecified fatal error while archiving $DESTPATH"
-				echo "Directory archival did not complete successfully."
+				echo "[!!] Error:There was an unspecified fatal error while archiving $DESTPATH"
+				echo "[!!] Directory archival did not complete successfully."
 				cleanupOnError
-				echo "Quitting"
+				echo "[*] Quitting"
 					exit 2
 			;;
 			7)
-				echo "There was an error with the command line for 7z."
-				echo "Please review the script contents or contact the author."
-				echo "Quitting"
-
+				echo "[!!] Error: There was an error with the command line for 7z."
+				echo "[!!] Please review the script contents or contact the author."
+				cleanupOnError
+				echo "[*] Quitting"
 				exit 7
 			;;
 			8)
-				echo "There is not enough memory to complete the requested operation with the settings supplied."
-				echo "Please review the script contents and adjust the dictionary size switch (-md=) provided to 7z or contact the author."
+				echo "[!!] Error: There is not enough memory to complete the requested operation with the settings supplied."
+				echo "[!!] Please review the script contents and adjust the dictionary size switch (-md=) provided to 7z or contact the author."
 				cleanupOnError
-				echo "Quitting"
+				echo "[*] Quitting"
+				exit 8
 			;;
-		esac
+			255)
+				echo "[!!] Error: Compression was terminated by user command."
+				cleanupOnError
+				echo "[*] Quitting"
+				exit 255
+			;;
+			*)
+				echo "[!] Warning: An unspecified error has occured. Since it is unspecified, the generated archive has not been automatically removed. Please verify that the archive is complete
+			esac
 	fi		
 #	if [ "$?" -ne 0 ]; then
 #		echo "An error occured while archiving $DIRECTORY.\nCheck 7z output above for more information"
